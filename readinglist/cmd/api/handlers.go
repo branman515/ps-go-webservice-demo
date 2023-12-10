@@ -60,7 +60,7 @@ func (app *application) getCreateBooksHandler(w http.ResponseWriter, r *http.Req
 			Published int      `json:"published"`
 			Pages     int      `json:"pages"`
 			Genres    []string `json:"genres"`
-			Rating    float64  `json:"rating"`
+			Rating    float32  `json:"rating"`
 		}
 
 		err := app.readJSON(w, r, &input)
@@ -159,7 +159,7 @@ func (app *application) updateBook(w http.ResponseWriter, r *http.Request) {
 		Published *int     `json:"published"`
 		Pages     *int     `json:"pages"`
 		Genres    []string `json:"genres"`
-		Rating    *float64 `json:"rating"`
+		Rating    *float32 `json:"rating"`
 	}
 
 	err = app.readJSON(w, r, &input) //read in the body to parse

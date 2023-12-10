@@ -15,7 +15,7 @@ type Book struct {
 	Published int       `json:"published,omitempty"`
 	Pages     int       `json:"pages,omitempty,string"` // change return data type to string
 	Genres    []string  `json:"genres,omitempty"`       //string slice
-	Rating    float64   `json:"rating,omitempty"`
+	Rating    float32   `json:"rating,omitempty"`
 	Version   int32     `json:"-"`
 }
 
