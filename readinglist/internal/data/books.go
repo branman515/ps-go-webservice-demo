@@ -53,7 +53,7 @@ func (b BookModel) Get(id int64) (*Book, error) {
 		&book.Published,
 		&book.Pages,
 		pq.Array(&book.Genres),
-		&book.Version,
+		&book.Rating,
 	)
 
 	if err != nil {

@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"strconv"
@@ -11,37 +11,73 @@ import (
 )
 
 func (app *application) home(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" { //ensures users can't get her without right path
+	if r.URL.Path != "/" { //ensures users navigated here with right path
 		http.NotFound(w, r)
 		return
 	}
 
-	books, err := app.readinglist.GetAll() //queries web service
+	books, err := app.readinglist.GetAll() //gets all the books in the DB (Will call webservice)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	fmt.Fprintf(w, "<html><head><title>Reading List</title></head><body><h1>Reading List</h1><ul>") //web page will render html
-	for _, book := range *books {
-		fmt.Fprintf(w, "<li>%s (%d)</li>", book.Title, book.Pages) //prints out each book
+
+	files := []string{ //defines what html pages we will need for request
+		"./ui/html/base.html",
+		"./ui/html/partials/nav.html",
+		"./ui/html/pages/home.html",
 	}
-	fmt.Fprintf(w, "</ul></body></html>")
+
+	ts, err := template.ParseFiles(files...) //parse the html files
+	if err != nil {
+		log.Print(err.Error())
+		http.Error(w, "Internal Server Error", 500)
+		return
+	}
+
+	err = ts.ExecuteTemplate(w, "base", books) //execute the templates in ts, executes base first, pass in books found in DB
+	if err != nil {
+		log.Print(err.Error())
+		http.Error(w, "Internal server error", 500)
+		return
+	}
 }
 
 func (app *application) bookView(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.URL.Query().Get("id")) //gets the ID
-	if err != nil || id < 1 {                        //check if ID is valid
+	id, err := strconv.Atoi(r.URL.Query().Get("id")) //get the ID sent in request
+	if err != nil || id < 1 {
 		http.NotFound(w, r)
 		return
 	}
 
-	book, err := app.readinglist.Get(int64(id)) //get the book
+	book, err := app.readinglist.Get(int64(id)) //get the book from web service call
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 
-	fmt.Fprintf(w, "%s (%d)\n", book.Title, book.Pages)
+	files := []string{ //define the html use for this page
+		"./ui/html/base.html",
+		"./ui/html/partials/nav.html",
+		"./ui/html/pages/view.html", //will be the main defined in base
+	}
+
+	// Used to convert comma-separated genres to a slice within the template.
+	funcs := template.FuncMap{"join": strings.Join} //joins the genres together
+
+	ts, err := template.New("showBook").Funcs(funcs).ParseFiles(files...) //parse the html files and adds template functions
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Internal Server Error", 500)
+		return
+	}
+
+	err = ts.ExecuteTemplate(w, "base", book) //execute the HTML pages, start with base, and then populate with the book data
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Internal Server Error", 500)
+		return
+	}
 }
 
 func (app *application) bookCreate(w http.ResponseWriter, r *http.Request) { //add a new book to the entry
@@ -57,43 +93,55 @@ func (app *application) bookCreate(w http.ResponseWriter, r *http.Request) { //a
 }
 
 func (app *application) bookCreateForm(w http.ResponseWriter, r *http.Request) { //create the form
-	fmt.Fprintf(w, "<html><head><title>Create Book</title></head>"+
-		"<body><h1>Create Book</h1><form action=\"/book/create\" method=\"post\">"+
-		"<label for=\"title\">Title</label><input type=\"text\" name=\"title\" id=\"title\">"+
-		"<label for=\"pages\">Pages</label><input type=\"number\" name=\"pages\" id=\"pages\">"+
-		"<label for=\"published\">Published</label><input type=\"number\" name=\"published\" id=\"published\">"+
-		"<label for=\"genres\">Genres</label><input type=\"text\" name=\"genres\" id=\"genres\">"+
-		"<label for=\"rating\">Rating</label><input type=\"number\" step=\"0.1\" name=\"rating\" id=\"rating\">"+
-		"<button type=\"submit\">Create</button></form></body></html>")
+	files := []string{
+		"./ui/html/base.html",
+		"./ui/html/partials/nav.html",
+		"./ui/html/pages/create.html", //defines the main for this page
+	}
+
+	ts, err := template.ParseFiles(files...) //parse html and adds templates to ts
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Internal Server Error", 500)
+		return
+	}
+	err = ts.ExecuteTemplate(w, "base", nil) //execute the template with no data
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Internal Server Error", 500)
+		return
+	}
 }
 
 func (app *application) bookCreateProcess(w http.ResponseWriter, r *http.Request) {
-	title := r.PostFormValue("title") //verify for each required form entry (could you pair with better input validation like in .net?)
-	if title == "" {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	err := r.ParseForm() //parse the form that we just submitted for later population below
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
 
-	pages, err := strconv.Atoi(r.PostFormValue("pages")) //atoI means to convert to int
-	if err != nil || pages < 1 {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
+	title := r.PostForm.Get("title")
 
-	published, err := strconv.Atoi(r.PostFormValue("published"))
-	if err != nil || published < 1 {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-
-	genres := strings.Split(r.PostFormValue("genres"), " ")
-
-	ratingFloat, err := strconv.ParseFloat(r.PostFormValue("rating"), 32)
+	published, err := strconv.Atoi(r.PostForm.Get("published")) //ato converts to int
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	rating := float32(ratingFloat) //convert float64 to float32
+
+	pages, err := strconv.Atoi(r.PostForm.Get("pages"))
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	genres := strings.Split(r.PostForm.Get("genres"), ",")
+
+	rating, err := strconv.ParseFloat(r.PostForm.Get("rating"), 32)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
 
 	book := struct { //create struct to marshal
 		Title     string   `json:"title"`
@@ -106,7 +154,7 @@ func (app *application) bookCreateProcess(w http.ResponseWriter, r *http.Request
 		Pages:     pages,
 		Published: published,
 		Genres:    genres,
-		Rating:    rating,
+		Rating:    float32(rating),
 	}
 
 	data, err := json.Marshal(book) //encode into json
