@@ -11,13 +11,17 @@ type envelope map[string]any //envelops the json response under a key
 
 // Credit: Alex Edwards, Let's Go Further
 // Additional note. keeping the credit since I'm writing to a public github
-func (app *application) writeJSON(w http.ResponseWriter, status int, data envelope) error {
+func (app *application) writeJSON(w http.ResponseWriter, status int, data envelope, headers http.Header) error {
 	js, err := json.MarshalIndent(data, "", "\t") //encode the into json
 	if err != nil {
 		return err
 	}
 
 	js = append(js, '\n') //append a newline for neatness
+
+	for key, value := range headers {
+		w.Header()[key] = value
+	}
 
 	w.Header().Set("Content-Type", "application/json") //set the header
 	w.WriteHeader(status)                              //write status code
