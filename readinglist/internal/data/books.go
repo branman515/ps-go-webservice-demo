@@ -40,7 +40,7 @@ func (b BookModel) Get(id int64) (*Book, error) {
 	}
 
 	query := `
-		SELECT id, created_at, title, published, pages, genres, version
+		SELECT id, created_at, title, published, pages, genres, rating
 		FROM books
 		WHERE id = $1`
 
